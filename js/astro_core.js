@@ -17,24 +17,22 @@ const NAKSHATRAS = [
 
 const PLANETS = ["Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn", "Rahu", "Ketu"];
 
-// --- Helpers ---
+// Define Spica (Chitra) for Ayanamsa Calculation
+// J2000 Coordinates: RA 13h 25m 11.579s, Dec -11° 09' 40.75"
+const SPICA_RA = 13.41988306; // hours
+const SPICA_DEC = -11.1613194; // degrees
+window.Astronomy.DefineStar(window.Astronomy.Body.Star1, SPICA_RA, SPICA_DEC, 250);
+
 function inputToDate(dateStr, timeStr, tzOffset) {
     // Create a date from input "YYYY-MM-DD", "HH:MM", and offset in hours
-    // Treat input as Local Time.
-    // UTC = Local - Offset
     const [y, m, d] = dateStr.split('-').map(Number);
-    const [hr, min] = timeStr.split(':').map(Number);
+    const timeParts = timeStr.split(':').map(Number);
+    const hr = timeParts[0];
+    const min = timeParts[1];
+    const sec = timeParts[2] || 0;
 
-    // Create UTC date components
-    // We adjust the hours by the negative of the offset
-    // e.g. 12:00 Local, Offset +5.5 => 06:30 UTC
-    // We can use Date.UTC()
-
-    // Total minutes offset
     const totalOffsetMinutes = tzOffset * 60;
-
-    // Create a base date in UTC
-    const utcMs = Date.UTC(y, m - 1, d, hr, min) - (totalOffsetMinutes * 60 * 1000);
+    const utcMs = Date.UTC(y, m - 1, d, hr, min, sec) - (totalOffsetMinutes * 60 * 1000);
     return new Date(utcMs);
 }
 
@@ -54,31 +52,36 @@ function dms(deg) {
 // --- Astrology Core ---
 
 /**
- * Calculates Lahiri Ayanamsa for a given date.
- * Uses a standard approximate polynomial for J2000 epoch.
- * Ayanamsa(t) = 23.85 + rate * (t - 2000) approx.
- * More precise Algorithm (Swiss Eph style approximation):
- * Mean Ayanamsa = 23deg 51' 25.532" + 50.2388475" * t (t in years since J2000)
+ * Calculates True Lahiri Ayanamsa (Chitra Paksha) dynamically.
+ * Ayanamsa = (True Tropical Longitude of Spica) - 180.
  */
-function getLahiriAyanamsa(date) {
-    const J2000 = new Date(Date.UTC(2000, 0, 1, 12, 0, 0));
-    const daysSinceJ2000 = (date - J2000) / (1000 * 60 * 60 * 24);
-    const yearsSinceJ2000 = daysSinceJ2000 / 365.2422;
+function getTrueAyanamsa(date) {
+    // Spica is defined as Star1
+    // Get Geocentric Vector (J2000)
+    const spicaVec = window.Astronomy.GeoVector(window.Astronomy.Body.Star1, date, true);
+    
+    // Create Rotation Matrix for Precession + Nutation (J2000 Eq -> Date Ecliptic)
+    // We combine J2000->DateEq (Precession) and DateEq->DateEcl (Obliquity).
+    // Note: Astronomy-engine's Rotation_EQJ_ECL might go straight to Mean or True Ecliptic.
+    // Documentation says Rotation_EQJ_ECL is for "Equatorial J2000 to Ecliptic J2000". Wait.
+    // Let's check the exported names.
+    // Rotation_EQJ_ECL vs Rotation_EQD_ECL. 
+    // Usually we want J2000 (EQJ) -> Date Ecliptic.
+    // Step 1: J2000 Eq -> Date Eq (Rotation_EQJ_EQD)
+    // Step 2: Date Eq -> Date Ecl (Rotation_EQD_ECL)
+    const rot1 = window.Astronomy.Rotation_EQJ_EQD(date);
+    const rot2 = window.Astronomy.Rotation_EQD_ECL(date);
+    const rotFinal = window.Astronomy.CombineRotation(rot1, rot2);
 
-    // Base Ayanamsa at J2000: 23° 51' 11" (approx 23.853 degrees)
-    // Precession rate: ~50.29 arcseconds per year
-    const initialAyanamsa = 23.853055;
-    const rate = 50.2388475 / 3600; // degrees per year
-
-    return initialAyanamsa + (rate * yearsSinceJ2000);
+    const spicaDateVec = window.Astronomy.RotateVector(rotFinal, spicaVec);
+    const spicaSphere = window.Astronomy.SphereFromVector(spicaDateVec);
+    
+    // Spica is at 0 Libra (180) in Sidereal.
+    // So Tropical - Ayanamsa = 180.
+    // Ayanamsa = Tropical - 180.
+    return normalize(spicaSphere.lon - 180);
 }
 
-/**
- * Get Tropical Longitude of Date.
- * Astronomy engine returns J2000 positions. We must precess them to Date.
- * Or simpler: use Astronomy.Equator(Body, Date, Observer, true, true) to get apparent topocentric/geocentric.
- * Then convert to Ecliptic.
- */
 function getGeoPositions(date) {
     const bodies = [
         window.Astronomy.Body.Sun,
@@ -90,115 +93,87 @@ function getGeoPositions(date) {
         window.Astronomy.Body.Saturn
     ];
 
-    // Calculate Ayanamsa
-    const ayanamsa = getLahiriAyanamsa(date);
+    // Calculate True Ayanamsa
+    const ayanamsa = getTrueAyanamsa(date);
 
-    // Positions map
-    // Use geocentric (no observer needed for general Rashi, but topocentric covers parallax for Moon).
-    // Let's use Geocentric J2000 vectors properly precessed.
-    // Astronomy.Ecliptic gives J2000 coordinates.
-    // We need "True Ecliptic of Date".
-    // Since Astronomy Engine doesn't have a direct "Ecliptic of Date" for planets easily,
-    // We will use a simplified approach:
-    // Tropical Longitude (approx) = Ecliptic Longitude (J2000) + Precession.
-    // Precession = 50.3" * years.
-    // Sidereal Longitude = Tropical Longitude - Ayanamsa.
-    // Algebraically: Sidereal = (J2000 + Precession) - (BaseAyanamsa + Precession)
-    // Sidereal = J2000 - BaseAyanamsa.
-    // Effectively, Lahiri Sidereal is VERY close to J2000 Ecliptic - 23.85.
-    // The fixed star frame doesn't rotate with precession.
-    // So Sidereal Position ~ J2000 Position - InitialAyanamsa(J2000) ?
-    // Wait. Sidereal Aries is defined by a fixed star.
-    // J2000 Frame is defined by Equinox at J2000.
-    // Distance between Fixed Star and Eq(J2000) is constant.
-    // Ayanamsa is the distance between Vernal Equinox and Fixed Star.
-    // At J2000, Ayanamsa is ~23.85.
-    // So Star Longitude = Tropical Longitude(J2000) - 23.85 ?
-    // YES.
-    // So, we can just take J2000 Ecliptic Longitude returned by Astronomy Engine and subtract ~23.85 deg.
-    // This removes the need to calculate current precession!
-    // Let's use 23.853 as fixed offset from J2000 frame.
-
-    const FIXED_AYANAMSA_J2000 = 23.853055;
+    // Prepare Rotation Matrix (J2000 Eq -> Date Ecliptic)
+    const rot1 = window.Astronomy.Rotation_EQJ_EQD(date);
+    const rot2 = window.Astronomy.Rotation_EQD_ECL(date);
+    const rotFinal = window.Astronomy.CombineRotation(rot1, rot2);
 
     const planets = {};
 
     bodies.forEach(body => {
-        const vec = window.Astronomy.GeoVector(body, date, true); // true = aberration correction
-        // Ecliptic coordinates in J2000
-        const ecl = window.Astronomy.Ecliptic(vec);
-        let lonJ2000 = ecl.elon;
-
-        let siderealLon = normalize(lonJ2000 - FIXED_AYANAMSA_J2000);
+        // Get J2000 Vector
+        const vecJ2000 = window.Astronomy.GeoVector(body, date, true);
+        // Rotate to Date Ecliptic (True Tropical)
+        const vecDate = window.Astronomy.RotateVector(rotFinal, vecJ2000);
+        // Get Spherical Coords
+        const sphere = window.Astronomy.SphereFromVector(vecDate);
+        
+        let tropicalLon = sphere.lon;
+        let siderealLon = normalize(tropicalLon - ayanamsa);
 
         planets[body] = {
             raw: siderealLon,
-            speed: 0 // TODO check speed for retrogression
+            speed: 0 // speed can be derived from subsequent calls if needed
         };
     });
 
     // Nodes (Rahu/Ketu)
-    // Astronomy engine doesn't have direct Body.Rahu? It has MoonNode?
-    // Astronomy.MoonPhase? No. 
-    // Usually need external calculation for nodes or if library supports it.
-    // `Astronomy-engine` does not strictly expose Nodes as Bodies in basic list.
-    // But it might have specific functions.
-    // Checking docs... it doesn't appear to have a "MoonNode" body constant exposed easily in JS version?
-    // Wait, let's assume we need to calculate Nodes or approximate.
-    // Actually, searching for 'Node' in astronomy engine...
-    // It implies we might need to find the intersection of Moon orbit and Ecliptic.
-    // Or we use a formula.
-    // Let's use a simplified formula for Mean Node if not available.
-    // Mean Node Longitude = 125.04 - 0.05295 * d (d = days from J2000).
+    // Mean Node (Tropical)
     const days = (date - new Date('2000-01-01T12:00:00Z')) / 86400000;
-    const nodeLon = normalize(125.04452 - 0.0529538083 * days);
+    const nodeMeanTropical = normalize(125.04452 - 0.0529538083 * days);
+    
+    // In this high-precision mode, we should ideally use True Node if possible,
+    // but Mean Node is standard for many computations. 
+    // The user's discrepancy was massive (Ayanamsa missing).
+    // Now we subtract the calculated True Ayanamsa.
+    
+    // Note: If using "True Node", we'd need a more complex formula. 
+    // Sticking to Mean Node for now as it's the standard default in many apps (like AstroSage default).
+    
+    const nodeLon = normalize(nodeMeanTropical - ayanamsa);
+
     planets['Rahu'] = { raw: nodeLon };
     planets['Ketu'] = { raw: normalize(nodeLon + 180) };
-
-    // Speed for positions (check prev/next day)
-    // For now assume standard.
 
     return planets;
 }
 
 function getHouseCusp(ascendant, houseNum) {
-    // Whole Sign: Cusp is 0 degrees of the sign.
-    // If Asc is 23 deg Taurus (Sign 2).
-    // House 1 starts at 0 deg Taurus.
-    // House 2 starts at 0 deg Gemini.
     const signIndex = Math.floor(ascendant / 30);
     return normalize((signIndex + houseNum - 1) * 30);
 }
 
 function getLagna(date, lat, lng) {
-    // Calculate Ascendant
-    // Needs Sidereal Time at location.
-    // Astronomy.SiderealTime(date) -> GMST.
-    // LST = GMST + lng_hours.
-    // Then calculate RAMC and Ascendant.
-    // Easier: Use Astronomy-engine to find which ecliptic point is rising?
-    // It doesn't have "Ascendant" helper directly?
-    // We can calculate it.
-    // Tan(Asc) = cos(LST) / - (sin(LST)*cos(eps) + tan(lat)*sin(eps)) ???
-    // Formula:
-    // alpha = RAMC.
-    // Asc = atan2(y, x)
-    // y = cos(RAMC)
-    // x = -sin(RAMC) * cos(obl) + tan(lat) * sin(obl) (for standard tropical)
-    // Then convert to Sidereal.
-
-    // 1. GMST (Greenwich Mean Sidereal Time in hours)
-    // Astronomy.SiderealTime returns GMST in hours.
-    const gmst = window.Astronomy.SiderealTime(date);
-    const lst = (gmst * 15 + lng); // Local Sidereal Time in degrees
-    const obl = 23.439; // Obliquity of ecliptic (approx) or use Astronomy.Obliquity(date)
-
+    // Calculate Ascendant (True Tropical -> Sidereal)
+    
+    // 1. Calculate RAMC (Right Ascension of Meridian Center)
+    const gmst = window.Astronomy.SiderealTime(date); // GMST hours
+    const lst = (gmst * 15 + lng); // LST degrees
     const ramc = normalize(lst);
+    
+    // 2. Obliquity of Ecliptic (True)
+    // We can extract it from the Rotation Matrix or calculate it.
+    // Astronomy.EclipticObliquity?
+    // Let's use the standard function if available or a high precision approx.
+    // Since we are using Rotation_EQD_ECL, we should be consistent.
+    // Let's use the rotation approach to find the Ascendant intersection point.
+    // Alternative: Standard Formula with True Obliquity.
+    // Obliquity ~ 23.4392911 - ...
+    // Let's trust the standard formula with a fixed J2000 obl or updated one.
+    // But better to use the rotation consistency. 
+    // However, for Ascendant, the analytic formula is robust.
+    const obl = 23.4392911; // J2000 Mean. Close enough for Ascendant geometry usually.
+    // Or closer:
+    const T = (date - new Date('2000-01-01T12:00:00Z')) / (86400000 * 36525);
+    const trueObl = 23.4392911 - (46.815 * T / 3600); 
+
     const ramcRad = ramc * Math.PI / 180;
-    const oblRad = obl * Math.PI / 180;
+    const oblRad = trueObl * Math.PI / 180;
     const latRad = lat * Math.PI / 180;
 
-    // Tropical Ascendant Formula
     const y = Math.cos(ramcRad);
     const x = -Math.sin(ramcRad) * Math.cos(oblRad) + Math.tan(latRad) * Math.sin(oblRad);
 
@@ -206,8 +181,8 @@ function getLagna(date, lat, lng) {
     ascTropical = normalize(ascTropical);
 
     // Apply Ayanamsa
-    const FIXED_AYANAMSA_J2000 = 23.853055;
-    return normalize(ascTropical - FIXED_AYANAMSA_J2000);
+    const ayanamsa = getTrueAyanamsa(date);
+    return normalize(ascTropical - ayanamsa);
 }
 
 // --- Varga Calculation ---
