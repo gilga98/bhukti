@@ -39,8 +39,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const gender = document.getElementById('gender').value;
             const dob = document.getElementById('dob').value;
             const tob = document.getElementById('tob').value;
-            const lat = parseFloat(document.getElementById('lat').value);
-            const lng = parseFloat(document.getElementById('lng').value);
+            const latStr = document.getElementById('lat').value;
+            const lngStr = document.getElementById('lng').value;
+
+            if (!latStr || !lngStr) {
+                alert("Please select a valid city from the list.");
+                btnText.textContent = "Generate Verbal Kundali";
+                loader.classList.add('hidden');
+                btn.disabled = false;
+                return;
+            }
+
+            const lat = parseFloat(latStr);
+            const lng = parseFloat(lngStr);
             const tz = parseFloat(document.getElementById('timezone').value);
 
             // Construct Date object including offset

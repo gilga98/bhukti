@@ -69,22 +69,13 @@
                         <div class="search-box">
                             <label for="citySearch">Search City</label>
                             <input type="text" id="citySearch" placeholder="Start typing city name..."
-                                autocomplete="off">
+                                autocomplete="off" required>
                             <ul id="citySuggestions" class="suggestions-list hidden"></ul>
                         </div>
 
-                        <p class="hint">Or manually enter coordinates below:</p>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="lat">Latitude (Decimal)</label>
-                                <input type="number" id="lat" placeholder="e.g. 28.6139" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="lng">Longitude (Decimal)</label>
-                                <input type="number" id="lng" placeholder="e.g. 77.2090" required>
-                            </div>
-                        </div>
+                        <!-- Hidden Coordinates (Auto-filled) -->
+                        <input type="hidden" id="lat">
+                        <input type="hidden" id="lng">
                     </div>
 
                     <button type="submit" class="generate-btn">
