@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verbal Kundali | Vedic Astrology</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@300;400;600&display=swap"
+        rel="stylesheet">
+
+    <link rel="stylesheet" href="css/style.css">
+
+    <!-- Core Engine -->
+    <script src="lib/astronomy.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <header class="main-header">
+            <h1>Verbal Kundali</h1>
+            <p class="subtitle">Detailed Vedic Horoscope Narrative</p>
+        </header>
+
+        <main>
+            <section class="input-section glass-panel">
+                <h2>Birth Details</h2>
+                <form id="kundaliForm">
+                    <div class="form-group">
+                        <label for="fullName">Full Name</label>
+                        <input type="text" id="fullName" placeholder="e.g. Arjuna" required>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="gender">Gender</label>
+                            <select id="gender" required>
+                                <option value="male">Male</option>
+                                <option value="female">Female</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="dob">Date of Birth</label>
+                            <input type="date" id="dob" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="tob">Time of Birth</label>
+                            <input type="time" id="tob" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="timezone">Timezone Offset (Hours)</label>
+                            <!-- Default to local usually, but allowing manual input is safer for exact calc -->
+                            <input type="number" id="timezone" step="0.5" placeholder="+5.5 for IST" required
+                                value="5.5">
+                        </div>
+                    </div>
+
+                    <div class="location-group">
+                        <h3>Place of Birth</h3>
+
+                        <!-- Search Box -->
+                        <div class="search-box">
+                            <label for="citySearch">Search City</label>
+                            <input type="text" id="citySearch" placeholder="Start typing city name..."
+                                autocomplete="off">
+                            <ul id="citySuggestions" class="suggestions-list hidden"></ul>
+                        </div>
+
+                        <p class="hint">Or manually enter coordinates below:</p>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="lat">Latitude (Decimal)</label>
+                                <input type="number" id="lat" step="0.0001" placeholder="e.g. 28.6139" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="lng">Longitude (Decimal)</label>
+                                <input type="number" id="lng" step="0.0001" placeholder="e.g. 77.2090" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="generate-btn">
+                        <span class="btn-text">Generate Verbal Kundali</span>
+                        <span class="loader hidden"></span>
+                    </button>
+                </form>
+            </section>
+
+            <section id="outputSection" class="output-section glass-panel hidden">
+                <div class="output-header">
+                    <h2>Horoscope Report</h2>
+                    <div class="output-controls">
+                        <div class="toggle-container">
+                            <span class="toggle-label">Verbal</span>
+                            <label class="switch">
+                                <input type="checkbox" id="formatToggle">
+                                <span class="slider round"></span>
+                            </label>
+                            <span class="toggle-label">JSON</span>
+                        </div>
+                        <button id="copyBtn" class="icon-btn" title="Copy to Clipboard">📋</button>
+                    </div>
+                </div>
+                <div id="narrativeContent" class="narrative-content">
+                    <!-- Dynamic Content Will Be Injected Here -->
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2025 Verbal Kundali System. Client-side Calculation.</p>
+        </footer>
+    </div>
+
+    <!-- Modules -->
+    <script type="module" src="js/main.js"></script>
+</body>
+
+</html>
